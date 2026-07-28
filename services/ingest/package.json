@@ -1,0 +1,24 @@
+{
+  "name": "@diwang/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API Gateway 日志接收与 SQS 入队 Lambda",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.0.0",
+    "@diwang/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

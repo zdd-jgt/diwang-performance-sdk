@@ -1,0 +1,31 @@
+# 技术决策
+
+1. 使用 pnpm Monorepo，统一管理 SDK、共享协议、服务和基础设施。
+2. `packages/contracts` 提供 TypeScript 类型和独立的运行时 Schema 入口，SDK 只导入类型。
+3. 使用 INP 取代 FID 作为当前 Core Web Vital。
+4. 使用 SQS 解耦日志接收与 ECS Cleaner，并通过 DLQ 保存多次失败的数据。
+5. ECS Cleaner 保持无状态，不在任务内长时间缓存 Parquet 文件。
+6. 使用 Firehose 完成缓冲、JSON 转 Parquet 和 S3 分区落盘。
+7. 清洗数据使用 Parquet + Snappy；分区采用服务端接收日期，数据量足够时再细分到小时。
+8. Athena 用于历史和半实时查询；React 不直接持有 AWS 凭据访问 Athena。
+9. 最终开发总结采用中文精简格式，并如实区分代码完成、本地验证、AWS 验证和生产可用。
+10. 开发使用 Codex 内部会话直接执行，不使用 VS Code Claude/ECC worker；阶段交接通过本目录三个 Markdown 文件完成。
+11. SDK 对性能会话使用 `sampleRate` 采样；错误事件不采样，但统一受单页每分钟事件上限约束。
+12. SDK 使用 `addEventListener` 捕获异常和生命周期事件，不覆盖宿主已有的全局处理函数。
+13. CLS 使用 1 秒间隔、5 秒总长的最大会话窗口；INP 按每 50 次交互取一个最差值近似 P98。
+14. 常规事件通过空闲回调批量发送；页面隐藏和错误优先使用 `sendBeacon`，失败时降级为 `fetch keepalive`。
+15. SDK 只从 `@diwang/contracts` 导入类型，浏览器运行时产物不得包含 Zod。
+16. Ingest Lambda 使用共享 Zod Schema 严格校验批次，客户端无法写入服务端接收时间。
+17. 单次接收请求限制为 240 KiB，为 SQS 消息信封保留空间；单批事件仍不得超过 50 条。
+18. SQS 消息只补充服务端 `receivedAt` 和 API `requestId`，当前不采集来源 IP。
+19. 接收成功返回 202；队列暂时不可用返回 503 和通用错误，不返回 AWS 异常、队列地址或请求体。
+20. Cleaner 输出扁平 JSON 记录，分区日期只从 Ingest 的服务端 `receivedAt` 派生。
+21. LCP、CLS、INP 评分由 Cleaner 重新计算，不信任客户端提交的评分。
+22. Firehose 部分失败时只重试失败记录；全部成功后才删除 SQS 消息，整体保持至少一次处理语义。
+23. 无效或处理失败的 SQS 消息不主动删除，由 SQS redrive 策略在达到接收次数后送入 DLQ。
+24. Cleaner 使用 Node 22 自包含 bundle、非 root 容器用户和 SIGTERM/SIGINT 优雅停止。
+25. 项目严格按六阶段设计推进；第 3、4 阶段验收完成前不得进入第 5 阶段。
+26. SDK 上报受限长度的 User-Agent；Cleaner 使用 MIT 许可的 Bowser 解析浏览器、操作系统和平台，不把原始 UA 写入清洗记录。
+27. Ingest 使用 SQS FIFO，按 `projectId` 分组、按 `batchId` 去重；同一批次禁止混入多个项目。
+28. Cleaner 使用 `eventId` 作为稳定 `recordId`，相同输入生成相同 Firehose 记录；Firehose 仍是至少一次语义，第 5 阶段必须在查询层按 `recordId` 去重。
+29. 第 3 阶段 SAM 模板采用 `prepare-only`，只授予 Lambda 对目标队列的 `sqs:SendMessage` 权限，不执行部署。

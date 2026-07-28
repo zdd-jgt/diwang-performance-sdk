@@ -1,0 +1,15 @@
+{
+  "name": "@diwang/aws-infrastructure",
+  "version": "0.1.0",
+  "private": true,
+  "description": "diwang 日志链路 AWS SAM/CloudFormation 模板静态验证",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "yaml": "^2.8.1"
+  }
+}

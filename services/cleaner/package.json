@@ -1,0 +1,25 @@
+{
+  "name": "@diwang/cleaner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SQS 日志清洗与 Firehose 写入服务",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/main.mjs",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-firehose": "^3.1096.0",
+    "@aws-sdk/client-sqs": "^3.1096.0",
+    "@diwang/contracts": "workspace:*",
+    "bowser": "^2.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: diwang performance telemetry ingest - prepare only
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: diwang-performance
+    AllowedPattern: "^[a-z0-9-]+$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - production
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+  ApiBurstLimit:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 5000
+  ApiRateLimit:
+    Type: Number
+    Default: 50
+    MinValue: 1
+    MaxValue: 5000
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues:
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures:
+      - arm64
+    Timeout: 10
+    MemorySize: 256
+    Tracing: Active
+
+Resources:
+  IngestDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName:
+        Fn::Sub: "${ProjectName}-${Environment}-ingest-dlq.fifo"
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  IngestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: "${ProjectName}-${Environment}-ingest.fifo"
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      DeduplicationScope: messageGroup
+      FifoThroughputLimit: perMessageGroupId
+      MaximumMessageSize: 262144
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 60
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - IngestDeadLetterQueue
+            - Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName:
+        Fn::Sub: "/aws/apigateway/${ProjectName}-${Environment}-ingest"
+      RetentionInDays:
+        Ref: LogRetentionDays
+
+  IngestHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName:
+        Ref: Environment
+      FailOnWarnings: true
+      CorsConfiguration:
+        AllowOrigins:
+          - Ref: AllowedOrigin
+        AllowMethods:
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+        MaxAge: 600
+      DefaultRouteSettings:
+        ThrottlingBurstLimit:
+          Ref: ApiBurstLimit
+        ThrottlingRateLimit:
+          Ref: ApiRateLimit
+      AccessLogSettings:
+        DestinationArn:
+          Fn::GetAtt:
+            - ApiAccessLogGroup
+            - Arn
+        Format: >-
+          {"requestId":"$context.requestId","status":"$context.status",
+          "responseLength":"$context.responseLength",
+          "integrationError":"$context.integrationErrorMessage"}
+      Tags:
+        Project:
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: "${ProjectName}-${Environment}-ingest"
+      CodeUri: ../../services/ingest/dist/
+      Handler: index.handler
+      ReservedConcurrentExecutions: 10
+      Environment:
+        Variables:
+          INGEST_QUEUE_URL:
+            Ref: IngestQueue
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Sid: SendOnlyToIngestQueue
+              Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource:
+                Fn::GetAtt:
+                  - IngestQueue
+                  - Arn
+      Events:
+        Collect:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: IngestHttpApi
+            Path: /v1/collect
+            Method: POST
+            PayloadFormatVersion: "2.0"
+      Tags:
+        Project:
+          Ref: ProjectName
+        Environment:
+          Ref: Environment
+
+  IngestFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName:
+        Fn::Sub: "/aws/lambda/${IngestFunction}"
+      RetentionInDays:
+        Ref: LogRetentionDays
+
+Outputs:
+  IngestApiUrl:
+    Description: HTTP API collection endpoint
+    Value:
+      Fn::Sub:
+        - "https://${ApiId}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${Stage}/v1/collect"
+        - ApiId:
+            Ref: IngestHttpApi
+          Stage:
+            Ref: Environment
+  IngestQueueUrl:
+    Description: FIFO queue URL consumed by Cleaner
+    Value:
+      Ref: IngestQueue
+  IngestQueueArn:
+    Description: FIFO queue ARN used by Cleaner task policy
+    Value:
+      Fn::GetAtt:
+        - IngestQueue
+        - Arn
+  IngestDeadLetterQueueUrl:
+    Description: Retained DLQ URL
+    Value:
+      Ref: IngestDeadLetterQueue
