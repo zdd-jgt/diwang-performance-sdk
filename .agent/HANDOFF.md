@@ -18,19 +18,21 @@
   - Firehose `DirectPut`、JSON 转 Snappy Parquet、错误前缀和投递日志。
   - Cleaner 仅对目标流执行 `firehose:PutRecordBatch` 的 IAM Policy。
   - Athena WorkGroup 的结果加密、7 天结果保留、扫描上限和 CloudWatch 指标。
-  - 按 `recordId` 去重的 View Saved Query，以及 LCP/CLS/INP 的 P50/P95/P99 Saved Query。
+  - 按 `projectId + partition_date + recordId` 去重的 View Saved Query，隔离租户并保留日期分区裁剪。
+  - 包含今天在内 7 个自然日的 LCP/CLS/INP P50/P95/P99 Saved Query。
+- `ProjectName` 最大 43 字符，确保拼接最坏环境名后 Firehose 名称不超过 64 字符。
 - 已提供独立 Athena SQL 文件和 `RUNBOOK-STORAGE.md`。
 - `packages/sdk/browser-acceptance/` 已纳入 Git，但真实浏览器 PASS 仍未执行。
 
 ## 本地验证结果
 
 - 实际 Node：`22.23.1`。
-- `pnpm --use-node-version=22.23.1 test`：84/84 通过。
+- `pnpm --use-node-version=22.23.1 test`：85/85 通过。
   - Contracts 12
   - SDK 29
   - Ingest 12
   - Cleaner 22
-  - IaC 9
+  - IaC 10
 - `pnpm --use-node-version=22.23.1 typecheck`：通过。
 - `pnpm --use-node-version=22.23.1 build`：通过。
 - `SAM_CLI_TELEMETRY=0 sam validate --lint --template-file infrastructure/aws/template-ingest.yaml`：通过。

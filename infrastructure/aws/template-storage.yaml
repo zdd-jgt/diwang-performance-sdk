@@ -6,6 +6,7 @@ Parameters:
   ProjectName:
     Type: String
     Default: diwang-performance
+    MaxLength: 43
     AllowedPattern: "^[a-z0-9-]+$"
   Environment:
     Type: String
@@ -459,7 +460,7 @@ Resources:
       WorkGroup:
         Ref: TelemetryAthenaWorkGroup
       Name: create_telemetry_deduplicated_view
-      Description: Create a view that keeps the latest row per stable recordId
+      Description: Keep the latest row per project, date partition and recordId
       QueryString:
         Fn::Sub: |
           CREATE OR REPLACE VIEW telemetry_deduplicated AS
@@ -474,7 +475,7 @@ Resources:
           FROM (
             SELECT raw.*,
               row_number() OVER (
-                PARTITION BY recordid
+                PARTITION BY projectid, partition_date, recordid
                 ORDER BY from_iso8601_timestamp(receivedat) DESC, requestid DESC
               ) AS duplicate_rank
             FROM ${GlueTableName} AS raw
@@ -503,7 +504,7 @@ Resources:
           AND eventtype = 'metric'
           AND metricname IN ('LCP', 'CLS', 'INP')
           AND partition_date BETWEEN
-            date_format(current_date - INTERVAL '7' DAY, '%Y-%m-%d')
+            date_format(current_date - INTERVAL '6' DAY, '%Y-%m-%d')
             AND date_format(current_date, '%Y-%m-%d')
         GROUP BY partition_date, metricname
         ORDER BY partition_date DESC, metricname

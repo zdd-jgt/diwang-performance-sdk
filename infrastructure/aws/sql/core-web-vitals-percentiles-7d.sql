@@ -10,7 +10,7 @@ WHERE projectid = 'replace_me'
   AND eventtype = 'metric'
   AND metricname IN ('LCP', 'CLS', 'INP')
   AND partition_date BETWEEN
-    date_format(current_date - INTERVAL '7' DAY, '%Y-%m-%d')
+    date_format(current_date - INTERVAL '6' DAY, '%Y-%m-%d')
     AND date_format(current_date, '%Y-%m-%d')
 GROUP BY partition_date, metricname
 ORDER BY partition_date DESC, metricname;

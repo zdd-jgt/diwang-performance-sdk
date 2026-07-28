@@ -12,6 +12,26 @@ const template = parse(
 ) as CloudFormationTemplate;
 
 describe("template-storage.yaml", () => {
+  it("限制 ProjectName，确保最长 Firehose 名称不超过 64 字符", () => {
+    const projectName = parameter("ProjectName");
+    const environments = parameter("Environment").AllowedValues as string[];
+    const longestEnvironment = Math.max(
+      ...environments.map((value) => value.length)
+    );
+
+    expect(projectName).toMatchObject({
+      Type: "String",
+      MaxLength: 43,
+      AllowedPattern: "^[a-z0-9-]+$"
+    });
+    expect(
+      Number(projectName.MaxLength) +
+        1 +
+        longestEnvironment +
+        "-telemetry".length
+    ).toBe(64);
+  });
+
   it("定义保留、加密且禁止公开访问的数据桶和查询结果桶", () => {
     for (const logicalId of [
       "TelemetryDataBucket",
@@ -198,7 +218,7 @@ describe("template-storage.yaml", () => {
     });
   });
 
-  it("Athena 工作组限制扫描量并提供 recordId 去重与分位数查询", () => {
+  it("Athena 工作组限制扫描量并提供租户、日期、recordId 去重", () => {
     const workGroup = resource("TelemetryAthenaWorkGroup").Properties
       ?.WorkGroupConfiguration as Record<string, unknown>;
     expect(workGroup).toMatchObject({
@@ -215,8 +235,8 @@ describe("template-storage.yaml", () => {
     });
 
     const dedupQuery = queryString("CreateDeduplicatedViewQuery");
-    expect(dedupQuery.toLowerCase()).toContain(
-      "partition by recordid"
+    expect(normalizeSql(dedupQuery)).toContain(
+      "partition by projectid, partition_date, recordid"
     );
     expect(dedupQuery).toContain("FROM ${GlueTableName} AS raw");
     expect(dedupQuery.toLowerCase()).toContain(
@@ -230,6 +250,8 @@ describe("template-storage.yaml", () => {
     expect(percentileQuery).toContain("approx_percentile(metricvalue, 0.95)");
     expect(percentileQuery).toContain("approx_percentile(metricvalue, 0.99)");
     expect(percentileQuery).toContain("partition_date BETWEEN");
+    expect(percentileQuery).toContain("INTERVAL '6' DAY");
+    expect(percentileQuery).not.toContain("INTERVAL '7' DAY");
   });
 
   it("独立 SQL 与模板查询保持关键语义一致", () => {
@@ -237,10 +259,14 @@ describe("template-storage.yaml", () => {
     const percentileSql = readSql(
       "core-web-vitals-percentiles-7d.sql"
     );
-    expect(dedupSql.toLowerCase()).toContain("partition by recordid");
+    expect(normalizeSql(dedupSql)).toContain(
+      "partition by projectid, partition_date, recordid"
+    );
     expect(dedupSql.toLowerCase()).toContain("duplicate_rank = 1");
     expect(percentileSql).toContain("telemetry_deduplicated");
     expect(percentileSql).toContain("partition_date BETWEEN");
+    expect(percentileSql).toContain("INTERVAL '6' DAY");
+    expect(percentileSql).not.toContain("INTERVAL '7' DAY");
   });
 });
 
@@ -248,6 +274,14 @@ function resource(logicalId: string): CloudFormationResource {
   const value = template.Resources[logicalId];
   if (!value) {
     throw new Error(`缺少资源: ${logicalId}`);
+  }
+  return value;
+}
+
+function parameter(name: string): Record<string, unknown> {
+  const value = template.Parameters[name];
+  if (!value) {
+    throw new Error(`缺少参数: ${name}`);
   }
   return value;
 }
@@ -275,6 +309,10 @@ function queryString(logicalId: string): string {
   throw new Error(`查询字符串格式无效: ${logicalId}`);
 }
 
+function normalizeSql(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 interface CloudFormationResource {
   Type?: string;
   DeletionPolicy?: string;
@@ -283,5 +321,6 @@ interface CloudFormationResource {
 }
 
 interface CloudFormationTemplate {
+  Parameters: Record<string, Record<string, unknown>>;
   Resources: Record<string, CloudFormationResource | undefined>;
 }
