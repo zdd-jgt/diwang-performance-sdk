@@ -1,0 +1,542 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: diwang telemetry storage and Athena query - prepare only
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: diwang-performance
+    AllowedPattern: "^[a-z0-9-]+$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - production
+  GlueDatabaseName:
+    Type: String
+    Default: diwang_performance_dev
+    AllowedPattern: "^[a-z0-9_]+$"
+  GlueTableName:
+    Type: String
+    Default: telemetry_raw
+    AllowedPattern: "^[a-z0-9_]+$"
+  PartitionProjectionStartDate:
+    Type: String
+    Default: "2025-01-01"
+    AllowedPattern: "^\\d{4}-\\d{2}-\\d{2}$"
+  FirehoseBufferSizeMB:
+    Type: Number
+    Default: 64
+    MinValue: 64
+    MaxValue: 128
+  FirehoseBufferIntervalSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 900
+  AthenaBytesScannedCutoff:
+    Type: Number
+    Default: 1073741824
+    MinValue: 10485760
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues:
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+
+Resources:
+  TelemetryDataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+        - Key: DataClassification
+          Value: telemetry
+
+  TelemetryDataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: TelemetryDataBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - Fn::GetAtt:
+                  - TelemetryDataBucket
+                  - Arn
+              - Fn::Sub: "${TelemetryDataBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  AthenaResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireQueryResults
+            Status: Enabled
+            ExpirationInDays: 7
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  AthenaResultsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: AthenaResultsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - Fn::GetAtt:
+                  - AthenaResultsBucket
+                  - Arn
+              - Fn::Sub: "${AthenaResultsBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  TelemetryGlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId:
+        Ref: AWS::AccountId
+      DatabaseInput:
+        Name:
+          Ref: GlueDatabaseName
+        Description: Diwang telemetry Parquet catalog
+
+  TelemetryGlueTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId:
+        Ref: AWS::AccountId
+      DatabaseName:
+        Ref: TelemetryGlueDatabase
+      TableInput:
+        Name:
+          Ref: GlueTableName
+        Description: Clean telemetry records written by Firehose
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          compressionType: snappy
+          projection.enabled: "true"
+          projection.partition_date.type: date
+          projection.partition_date.format: yyyy-MM-dd
+          projection.partition_date.range:
+            Fn::Sub: "${PartitionProjectionStartDate},NOW"
+          projection.partition_date.interval: "1"
+          projection.partition_date.interval.unit: DAYS
+          storage.location.template:
+            Fn::Sub: "s3://${TelemetryDataBucket}/telemetry/partition_date=${!partition_date}/"
+        PartitionKeys:
+          - Name: partition_date
+            Type: string
+        StorageDescriptor:
+          Location:
+            Fn::Sub: "s3://${TelemetryDataBucket}/telemetry/"
+          Compressed: true
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+          Columns:
+            - Name: schemaVersion
+              Type: int
+            - Name: receivedAt
+              Type: string
+            - Name: partitionDate
+              Type: string
+            - Name: requestId
+              Type: string
+            - Name: batchId
+              Type: string
+            - Name: recordId
+              Type: string
+            - Name: eventId
+              Type: string
+            - Name: projectId
+              Type: string
+            - Name: sessionId
+              Type: string
+            - Name: clientTimestamp
+              Type: bigint
+            - Name: sdkVersion
+              Type: string
+            - Name: release
+              Type: string
+            - Name: traceId
+              Type: string
+            - Name: sampleRate
+              Type: double
+            - Name: pageUrl
+              Type: string
+            - Name: referrer
+              Type: string
+            - Name: browserName
+              Type: string
+            - Name: browserVersion
+              Type: string
+            - Name: osName
+              Type: string
+            - Name: osVersion
+              Type: string
+            - Name: platformType
+              Type: string
+            - Name: eventType
+              Type: string
+            - Name: metricName
+              Type: string
+            - Name: metricValue
+              Type: double
+            - Name: metricRating
+              Type: string
+            - Name: errorKind
+              Type: string
+            - Name: errorMessage
+              Type: string
+            - Name: errorStack
+              Type: string
+            - Name: errorSourceUrl
+              Type: string
+            - Name: errorLine
+              Type: int
+            - Name: errorColumn
+              Type: int
+
+  FirehoseLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName:
+        Fn::Sub: "/aws/kinesisfirehose/${ProjectName}-${Environment}-telemetry"
+      RetentionInDays:
+        Ref: LogRetentionDays
+
+  FirehoseLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName:
+        Ref: FirehoseLogGroup
+      LogStreamName: S3Delivery
+
+  FirehoseDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - firehose.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: FirehoseParquetDelivery
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadGlueSchema
+                Effect: Allow
+                Action:
+                  - glue:GetTable
+                  - glue:GetTableVersion
+                  - glue:GetTableVersions
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - Fn::Sub: "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDatabaseName}"
+                  - Fn::Sub: "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDatabaseName}/${GlueTableName}"
+              - Sid: InspectDataBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                Resource:
+                  Fn::GetAtt:
+                    - TelemetryDataBucket
+                    - Arn
+              - Sid: WriteTelemetryObjects
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  Fn::Sub: "${TelemetryDataBucket.Arn}/*"
+              - Sid: WriteDeliveryLogs
+                Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::GetAtt:
+                    - FirehoseLogGroup
+                    - Arn
+
+  TelemetryDeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    DependsOn:
+      - TelemetryDataBucketPolicy
+    Properties:
+      DeliveryStreamName:
+        Fn::Sub: "${ProjectName}-${Environment}-telemetry"
+      DeliveryStreamType: DirectPut
+      ExtendedS3DestinationConfiguration:
+        BucketARN:
+          Fn::GetAtt:
+            - TelemetryDataBucket
+            - Arn
+        RoleARN:
+          Fn::GetAtt:
+            - FirehoseDeliveryRole
+            - Arn
+        Prefix: "telemetry/partition_date=!{partitionKeyFromQuery:partition_date}/"
+        ErrorOutputPrefix: "errors/!{firehose:error-output-type}/partition_date=!{timestamp:yyyy-MM-dd}/"
+        FileExtension: .parquet
+        BufferingHints:
+          SizeInMBs:
+            Ref: FirehoseBufferSizeMB
+          IntervalInSeconds:
+            Ref: FirehoseBufferIntervalSeconds
+        CompressionFormat: UNCOMPRESSED
+        EncryptionConfiguration:
+          NoEncryptionConfig: NoEncryption
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName:
+            Ref: FirehoseLogGroup
+          LogStreamName:
+            Ref: FirehoseLogStream
+        DynamicPartitioningConfiguration:
+          Enabled: true
+          RetryOptions:
+            DurationInSeconds: 300
+        ProcessingConfiguration:
+          Enabled: true
+          Processors:
+            - Type: MetadataExtraction
+              Parameters:
+                - ParameterName: MetadataExtractionQuery
+                  ParameterValue: "{partition_date:.partitionDate}"
+                - ParameterName: JsonParsingEngine
+                  ParameterValue: JQ-1.6
+        DataFormatConversionConfiguration:
+          Enabled: true
+          InputFormatConfiguration:
+            Deserializer:
+              OpenXJsonSerDe:
+                CaseInsensitive: false
+                ConvertDotsInJsonKeysToUnderscores: false
+          OutputFormatConfiguration:
+            Serializer:
+              ParquetSerDe:
+                Compression: SNAPPY
+                EnableDictionaryCompression: true
+                WriterVersion: V1
+          SchemaConfiguration:
+            CatalogId:
+              Ref: AWS::AccountId
+            DatabaseName:
+              Ref: TelemetryGlueDatabase
+            Region:
+              Ref: AWS::Region
+            RoleARN:
+              Fn::GetAtt:
+                - FirehoseDeliveryRole
+                - Arn
+            TableName:
+              Ref: TelemetryGlueTable
+            VersionId: LATEST
+        S3BackupMode: Disabled
+
+  CleanerFirehoseWritePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Allow Cleaner task role to write only to the telemetry stream
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PutOnlyToTelemetryStream
+            Effect: Allow
+            Action:
+              - firehose:PutRecordBatch
+            Resource:
+              Fn::GetAtt:
+                - TelemetryDeliveryStream
+                - Arn
+
+  TelemetryAthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name:
+        Fn::Sub: "${ProjectName}-${Environment}-telemetry"
+      Description: Cost-controlled telemetry queries
+      State: ENABLED
+      RecursiveDeleteOption: true
+      WorkGroupConfiguration:
+        BytesScannedCutoffPerQuery:
+          Ref: AthenaBytesScannedCutoff
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        RequesterPaysEnabled: false
+        ResultConfiguration:
+          OutputLocation:
+            Fn::Sub: "s3://${AthenaResultsBucket}/results/"
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+          ExpectedBucketOwner:
+            Ref: AWS::AccountId
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  CreateDeduplicatedViewQuery:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database:
+        Ref: TelemetryGlueDatabase
+      WorkGroup:
+        Ref: TelemetryAthenaWorkGroup
+      Name: create_telemetry_deduplicated_view
+      Description: Create a view that keeps the latest row per stable recordId
+      QueryString:
+        Fn::Sub: |
+          CREATE OR REPLACE VIEW telemetry_deduplicated AS
+          SELECT
+            schemaversion, receivedat, partitiondate, requestid, batchid,
+            recordid, eventid, projectid, sessionid, clienttimestamp,
+            sdkversion, release, traceid, samplerate, pageurl, referrer,
+            browsername, browserversion, osname, osversion, platformtype,
+            eventtype, metricname, metricvalue, metricrating, errorkind,
+            errormessage, errorstack, errorsourceurl, errorline, errorcolumn,
+            partition_date
+          FROM (
+            SELECT raw.*,
+              row_number() OVER (
+                PARTITION BY recordid
+                ORDER BY from_iso8601_timestamp(receivedat) DESC, requestid DESC
+              ) AS duplicate_rank
+            FROM ${GlueTableName} AS raw
+          )
+          WHERE duplicate_rank = 1
+
+  CoreWebVitalsPercentilesQuery:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database:
+        Ref: TelemetryGlueDatabase
+      WorkGroup:
+        Ref: TelemetryAthenaWorkGroup
+      Name: core_web_vitals_percentiles_7d
+      Description: P50 P95 P99 by date and metric for one project
+      QueryString: |
+        SELECT
+          partition_date,
+          metricname,
+          approx_percentile(metricvalue, 0.50) AS p50,
+          approx_percentile(metricvalue, 0.95) AS p95,
+          approx_percentile(metricvalue, 0.99) AS p99,
+          count(*) AS sample_count
+        FROM telemetry_deduplicated
+        WHERE projectid = 'replace_me'
+          AND eventtype = 'metric'
+          AND metricname IN ('LCP', 'CLS', 'INP')
+          AND partition_date BETWEEN
+            date_format(current_date - INTERVAL '7' DAY, '%Y-%m-%d')
+            AND date_format(current_date, '%Y-%m-%d')
+        GROUP BY partition_date, metricname
+        ORDER BY partition_date DESC, metricname
+
+Outputs:
+  TelemetryDataBucketName:
+    Description: Retained S3 bucket containing partitioned Parquet files
+    Value:
+      Ref: TelemetryDataBucket
+  AthenaResultsBucketName:
+    Description: Retained S3 bucket for short-lived Athena query results
+    Value:
+      Ref: AthenaResultsBucket
+  FirehoseDeliveryStreamName:
+    Description: Stream name configured in Cleaner FIREHOSE_STREAM_NAME
+    Value:
+      Ref: TelemetryDeliveryStream
+  FirehoseDeliveryStreamArn:
+    Description: DirectPut delivery stream ARN
+    Value:
+      Fn::GetAtt:
+        - TelemetryDeliveryStream
+        - Arn
+  CleanerFirehoseWritePolicyArn:
+    Description: Managed policy to attach to the Cleaner ECS task role
+    Value:
+      Ref: CleanerFirehoseWritePolicy
+  GlueDatabase:
+    Value:
+      Ref: TelemetryGlueDatabase
+  GlueTable:
+    Value:
+      Ref: TelemetryGlueTable
+  AthenaWorkGroup:
+    Value:
+      Ref: TelemetryAthenaWorkGroup

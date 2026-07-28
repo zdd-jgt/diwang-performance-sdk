@@ -22,7 +22,8 @@ pnpm --filter @diwang/aws-infrastructure typecheck
 pnpm build
 ```
 
-`sam validate --lint` 尚未执行；只有确认本机 SAM CLI 可用且命令保持纯本地时才执行。
+`SAM_CLI_TELEMETRY=0 sam validate --lint --template-file infrastructure/aws/template-ingest.yaml`
+已于 2026-07-28 在本地通过，未连接 AWS 账号或创建资源。
 
 ## 部署后健康检查
 

@@ -29,3 +29,9 @@
 27. Ingest 使用 SQS FIFO，按 `projectId` 分组、按 `batchId` 去重；同一批次禁止混入多个项目。
 28. Cleaner 使用 `eventId` 作为稳定 `recordId`，相同输入生成相同 Firehose 记录；Firehose 仍是至少一次语义，第 5 阶段必须在查询层按 `recordId` 去重。
 29. 第 3 阶段 SAM 模板采用 `prepare-only`，只授予 Lambda 对目标队列的 `sqs:SendMessage` 权限，不执行部署。
+30. 第 5 阶段使用独立 `template-storage.yaml`，避免修改已验收的接收链路模板；两份模板在部署时可作为独立 Stack 管理。
+31. Firehose 只按 Cleaner 从服务端 `receivedAt` 派生的 `partitionDate` 动态分区，不按 `projectId` 切分 S3 前缀，避免低流量项目产生大量小文件。
+32. Firehose 使用 Glue 固定 Schema 将 JSON 转为 Snappy Parquet；S3 目标层保持 `UNCOMPRESSED`，压缩由 Parquet Serializer 负责。
+33. Glue 表使用日期分区投影，不每日创建 Partition；Athena 查询必须包含日期条件，并由 WorkGroup 强制结果位置、SSE-S3 和单查询扫描上限。
+34. Firehose 至少一次写入产生的重复记录不在存储层删除；Athena 去重视图按稳定 `recordId` 和最新 `receivedAt` 保留一条。
+35. 遥测数据桶和 Athena 结果桶均设置 `Retain`；结果对象 7 天过期，数据桶不自动删除，避免未经确认的数据销毁。
