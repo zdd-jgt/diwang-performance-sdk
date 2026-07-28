@@ -19,4 +19,15 @@ describe("Cleaner 敏感文本清理", () => {
       sanitizeText("request\0 failed: Bearer abc.def-123", 4_096)
     ).toBe("request failed: Bearer [REDACTED]");
   });
+
+  it("完整遮盖带空格和引号的敏感值", () => {
+    expect(
+      sanitizeText(
+        `token = "abc def"\npassword: 'hunter two'\nAuthorization: "Bearer token with spaces"\nBearer 'standalone token'`,
+        4_096
+      )
+    ).toBe(
+      "token = [REDACTED]\npassword: [REDACTED]\nAuthorization: [REDACTED]\nBearer [REDACTED]"
+    );
+  });
 });

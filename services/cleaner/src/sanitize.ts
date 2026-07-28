@@ -1,10 +1,11 @@
 const SENSITIVE_ASSIGNMENT =
-  /\b(password|passwd|token|secret|api[_-]?key)\b(\s*[:=]\s*)([^\s,;]+)/gi;
+  /\b(password|passwd|token|secret|api[_-]?key)\b(\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;]+)/gi;
 const AUTHORIZATION_HEADER =
-  /\b(authorization|proxy-authorization)\b(\s*[:=]\s*)(?:(?:bearer|basic)\s+)?[^\s,;]+/gi;
+  /\b(authorization|proxy-authorization)\b(\s*[:=]\s*)(?:(?:bearer|basic)\s+)?(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;]+)/gi;
 const COOKIE_HEADER =
   /\b(cookie|set-cookie)\b(\s*[:=]\s*)[^\r\n]*/gi;
-const BEARER_CREDENTIAL = /\bbearer\s+[a-z0-9._~+/=-]+/gi;
+const BEARER_CREDENTIAL =
+  /\bbearer\s+(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[a-z0-9._~+/=-]+)/gi;
 
 export function sanitizeUrl(value: string | undefined): string | undefined {
   if (!value) {

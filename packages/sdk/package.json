@@ -18,6 +18,7 @@
     }
   },
   "scripts": {
+    "acceptance:browser": "node browser-acceptance/server.mjs",
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Diwang SDK 浏览器验收</title>
+    <style>
+      body {
+        max-width: 760px;
+        margin: 48px auto;
+        padding: 0 24px;
+        color: #18212f;
+        font: 16px/1.6 system-ui, sans-serif;
+      }
+      #status {
+        padding: 16px;
+        border-radius: 8px;
+        background: #fff4d6;
+      }
+      #status.pass {
+        background: #dcfce7;
+        color: #166534;
+      }
+      #status.fail {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      pre {
+        overflow: auto;
+        padding: 16px;
+        border-radius: 8px;
+        background: #f4f6f8;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Diwang SDK 浏览器验收</h1>
+    <p id="status">正在采集真实浏览器事件……</p>
+    <pre id="details"></pre>
+    <script type="module">
+      import { init } from "/sdk.js";
+
+      const originalOnError = () => true;
+      const originalOnUnhandledRejection = () => true;
+      window.onerror = originalOnError;
+      window.onunhandledrejection = originalOnUnhandledRejection;
+      const localEvents = [];
+
+      const sdk = init({
+        logUrl: `${location.origin}/collect`,
+        projectId: "browser-acceptance",
+        batchSize: 1,
+        flushIntervalMs: 100,
+        onEvent: (event) => localEvents.push(event)
+      });
+
+      window.dispatchEvent(
+        new ErrorEvent("error", {
+          message: "Authorization: Bearer browser-secret",
+          filename: `${location.origin}/app.js?token=browser-secret`,
+          lineno: 10,
+          colno: 2
+        })
+      );
+      sdk.flush();
+
+      const sleep = (milliseconds) =>
+        new Promise((resolve) => setTimeout(resolve, milliseconds));
+      let batches = [];
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await sleep(100);
+        const response = await fetch("/results");
+        batches = await response.json();
+        if (batches.length > 0) {
+          break;
+        }
+      }
+
+      const serialized = JSON.stringify(batches);
+      const events = batches.flatMap((batch) => batch.events ?? []);
+      const errorEvent = events.find((event) => event.eventType === "error");
+      const checks = {
+        globalsPreserved:
+          window.onerror === originalOnError &&
+          window.onunhandledrejection === originalOnUnhandledRejection,
+        receivedBatch: batches.length > 0,
+        sensitiveDataRedacted:
+          errorEvent?.error?.message ===
+            "Authorization: [REDACTED]" &&
+          !serialized.includes("browser-secret"),
+        pageQueryRemoved:
+          events.every((event) => !event.page?.url?.includes("?")),
+        userAgentCollected:
+          events.some((event) => Boolean(event.userAgent)),
+        callbackTriggered: localEvents.length > 0
+      };
+      const passed = Object.values(checks).every(Boolean);
+      const status = document.querySelector("#status");
+      status.textContent = passed ? "PASS：浏览器验收通过" : "FAIL：浏览器验收失败";
+      status.className = passed ? "pass" : "fail";
+      document.querySelector("#details").textContent = JSON.stringify(
+        { checks, batchCount: batches.length, eventCount: events.length },
+        null,
+        2
+      );
+      document.title = passed ? "PASS - Diwang SDK" : "FAIL - Diwang SDK";
+      sdk.stop();
+    </script>
+  </body>
+</html>

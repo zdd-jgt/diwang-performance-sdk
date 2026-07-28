@@ -8,6 +8,7 @@
     "node": "22.x"
   },
   "scripts": {
+    "acceptance:browser": "pnpm --filter @diwang/sdk build && pnpm --filter @diwang/sdk acceptance:browser",
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"

@@ -43,6 +43,28 @@ describe("敏感信息清理", () => {
     );
   });
 
+  it("完整遮盖带空格和引号的敏感值", () => {
+    expect(
+      sanitizeText(
+        `token = "abc def" password: 'hunter two' api_key = "key with spaces"`,
+        4_096
+      )
+    ).toBe(
+      "token = [REDACTED] password: [REDACTED] api_key = [REDACTED]"
+    );
+  });
+
+  it("完整遮盖带引号的认证凭据", () => {
+    expect(
+      sanitizeText(
+        `Authorization: Bearer "token with spaces"\nrequest failed with Bearer 'another token'`,
+        4_096
+      )
+    ).toBe(
+      "Authorization: [REDACTED]\nrequest failed with Bearer [REDACTED]"
+    );
+  });
+
   it("拒绝非 http/https URL", () => {
     expect(sanitizeUrl("javascript:alert(1)")).toBeUndefined();
   });

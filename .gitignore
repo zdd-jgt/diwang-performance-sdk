@@ -6,3 +6,9 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Codex Bridge 运行态文件（直接会话不维护）
+.agent/CONTEXT.md
+.agent/STATE.json
+.agent/execution/
+.agent/plans/
