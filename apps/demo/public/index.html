@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Diwang Performance SDK 本地交互演示"
+    />
+    <title>Diwang Performance SDK Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 Demo 首页">
+        <span class="brand-mark">D</span>
+        <span>
+          <strong>Diwang</strong>
+          <small>Performance SDK</small>
+        </span>
+      </a>
+      <div class="status-group" aria-label="运行状态">
+        <span>SDK <b id="sdk-status" data-state="pending">启动中</b></span>
+        <span>接收端 <b id="receiver-status" data-state="pending">连接中</b></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">LOCAL OBSERVABILITY LAB</p>
+          <h1>亲手触发一次<br /><span>性能与错误上报</span></h1>
+          <p class="hero-copy">
+            页面正在运行真实 SDK。本地接收端会展示批次、事件和脱敏后的数据，
+            全程不连接 AWS。
+          </p>
+        </div>
+        <aside class="privacy-card">
+          <span class="privacy-icon" aria-hidden="true">✓</span>
+          <div>
+            <strong>安全演示模式</strong>
+            <p>查询参数、Token 与认证信息会在离开浏览器前清理。</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="metrics-grid" aria-label="采集概览">
+        <article class="metric-card">
+          <span>本地采集</span>
+          <strong id="local-count">0</strong>
+          <small>onEvent 回调</small>
+        </article>
+        <article class="metric-card">
+          <span>接收批次</span>
+          <strong id="batch-count">0</strong>
+          <small>POST /collect</small>
+        </article>
+        <article class="metric-card">
+          <span>接收事件</span>
+          <strong id="event-count">0</strong>
+          <small>最多展示 100 条</small>
+        </article>
+        <article class="metric-card">
+          <span>最近接收</span>
+          <strong id="last-received" class="time-value">等待事件</strong>
+          <small>本机时间</small>
+        </article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel action-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">01 · TRIGGER</p>
+              <h2>生成测试事件</h2>
+            </div>
+            <span class="panel-tag">交互演示</span>
+          </div>
+
+          <div class="action-grid">
+            <button type="button" data-action="js-error">
+              <span class="action-index">01</span>
+              <strong>JS 错误</strong>
+              <small>验证敏感信息脱敏</small>
+            </button>
+            <button type="button" data-action="promise-error">
+              <span class="action-index">02</span>
+              <strong>Promise 异常</strong>
+              <small>验证 rejection 捕获</small>
+            </button>
+            <button type="button" data-action="resource-error">
+              <span class="action-index">03</span>
+              <strong>资源错误</strong>
+              <small>验证加载失败采集</small>
+            </button>
+            <button type="button" data-action="flush">
+              <span class="action-index">04</span>
+              <strong>立即上报</strong>
+              <small>手动刷新内存队列</small>
+            </button>
+          </div>
+          <p id="action-message" class="action-message" aria-live="polite">
+            请选择一种事件开始。
+          </p>
+        </article>
+
+        <article class="panel raw-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">02 · INSPECT</p>
+              <h2>浏览器侧最新事件</h2>
+            </div>
+          </div>
+          <pre id="raw-output">等待 SDK 采集事件……</pre>
+        </article>
+      </section>
+
+      <section class="panel stream-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">03 · RECEIVE</p>
+            <h2>本地接收事件流</h2>
+          </div>
+          <button class="text-button" type="button" data-action="clear">
+            清空接收数据
+          </button>
+        </div>
+        <ul id="event-list" class="event-list">
+          <li class="empty-state">正在等待接收端返回数据……</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <span>Diwang Performance SDK · Local Demo</span>
+      <span>数据只保存在当前 Node.js 进程内存中</span>
+    </footer>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

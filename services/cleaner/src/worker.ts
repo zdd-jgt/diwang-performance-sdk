@@ -12,7 +12,8 @@ import { consoleLogger, type Logger } from "./logger.js";
 
 export interface CleanerSQSClient {
   receive(
-    command: ReceiveMessageCommand
+    command: ReceiveMessageCommand,
+    options?: { abortSignal?: AbortSignal }
   ): Promise<Pick<ReceiveMessageCommandOutput, "Messages">>;
   delete(command: DeleteMessageCommand): Promise<unknown>;
 }
@@ -32,6 +33,11 @@ export interface CleanerRunSummary {
   received: number;
   processed: number;
   failed: number;
+}
+
+export interface CleanerDrainSummary extends CleanerRunSummary {
+  polls: number;
+  pollFailures: number;
 }
 
 export class CleanerWorker {
@@ -58,13 +64,16 @@ export class CleanerWorker {
         new Promise((resolve) => setTimeout(resolve, milliseconds)));
   }
 
-  public async runOnce(): Promise<CleanerRunSummary> {
+  public async runOnce(
+    signal?: AbortSignal
+  ): Promise<CleanerRunSummary> {
     const response = await this.options.sqsClient.receive(
       new ReceiveMessageCommand({
         QueueUrl: this.options.queueUrl,
         MaxNumberOfMessages: this.maxMessages,
         WaitTimeSeconds: this.waitTimeSeconds
-      })
+      }),
+      signal ? { abortSignal: signal } : undefined
     );
     const messages = response.Messages ?? [];
     const summary: CleanerRunSummary = {
@@ -99,6 +108,60 @@ export class CleanerWorker {
       }
     }
     this.logger.info("Cleaner 已停止");
+  }
+
+  public async runUntilDrained(
+    signal: AbortSignal,
+    emptyPollsBeforeExit: number
+  ): Promise<CleanerDrainSummary> {
+    assertIntegerRange(
+      "emptyPollsBeforeExit",
+      emptyPollsBeforeExit,
+      1,
+      10
+    );
+    const total: CleanerDrainSummary = {
+      received: 0,
+      processed: 0,
+      failed: 0,
+      polls: 0,
+      pollFailures: 0
+    };
+    let consecutiveEmptyPolls = 0;
+
+    this.logger.info("Cleaner 排空任务已启动");
+    while (!signal.aborted) {
+      try {
+        const summary = await this.runOnce(signal);
+        total.polls += 1;
+        total.received += summary.received;
+        total.processed += summary.processed;
+        total.failed += summary.failed;
+
+        consecutiveEmptyPolls =
+          summary.received === 0 ? consecutiveEmptyPolls + 1 : 0;
+        if (consecutiveEmptyPolls >= emptyPollsBeforeExit) {
+          break;
+        }
+      } catch {
+        if (signal.aborted) {
+          break;
+        }
+        total.pollFailures += 1;
+        this.logger.error("Cleaner 轮询失败", {
+          code: "POLL_FAILED"
+        });
+        await this.sleep(this.retryDelayMs);
+      }
+    }
+    this.logger.info("Cleaner 排空任务已结束", {
+      received: total.received,
+      processed: total.processed,
+      failed: total.failed,
+      polls: total.polls,
+      pollFailures: total.pollFailures
+    });
+    return total;
   }
 
   private async processMessage(message: Message): Promise<boolean> {

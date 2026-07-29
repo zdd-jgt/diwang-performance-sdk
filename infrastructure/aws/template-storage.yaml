@@ -41,6 +41,11 @@ Parameters:
     Type: Number
     Default: 1073741824
     MinValue: 10485760
+  TelemetryRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 3650
   LogRetentionDays:
     Type: Number
     Default: 14
@@ -61,6 +66,12 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireTelemetryData
+            Status: Enabled
+            ExpirationInDays:
+              Ref: TelemetryRetentionDays
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -383,7 +394,7 @@ Resources:
           InputFormatConfiguration:
             Deserializer:
               OpenXJsonSerDe:
-                CaseInsensitive: false
+                CaseInsensitive: true
                 ConvertDotsInJsonKeysToUnderscores: false
           OutputFormatConfiguration:
             Serializer:

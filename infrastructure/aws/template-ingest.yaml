@@ -16,7 +16,10 @@ Parameters:
       - production
   AllowedOrigin:
     Type: String
-    Default: "*"
+    AllowedPattern: "^https://[A-Za-z0-9.-]+(?::[0-9]+)?$"
+  AllowedProjectId:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9_-]+$"
   ApiBurstLimit:
     Type: Number
     Default: 100
@@ -146,11 +149,12 @@ Resources:
         Fn::Sub: "${ProjectName}-${Environment}-ingest"
       CodeUri: ../../services/ingest/dist/
       Handler: index.handler
-      ReservedConcurrentExecutions: 10
       Environment:
         Variables:
           INGEST_QUEUE_URL:
             Ref: IngestQueue
+          ALLOWED_PROJECT_IDS:
+            Ref: AllowedProjectId
       Policies:
         - Version: "2012-10-17"
           Statement:

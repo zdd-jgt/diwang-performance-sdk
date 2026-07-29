@@ -154,13 +154,38 @@ describe("createIngestHandler", () => {
     expect(response.body).not.toContain("token");
   });
 
-  it("构造时拒绝空队列地址", () => {
+  it("拒绝未列入白名单的项目", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const response = await createIngestHandler({
+      queueUrl:
+        "https://sqs.ap-northeast-1.amazonaws.com/123/ingest",
+      allowedProjectIds: ["another-project"],
+      sqsClient: { send } as SQSClientLike
+    })(createEvent(JSON.stringify(validBatch)));
+
+    expect(response.statusCode).toBe(403);
+    expect((JSON.parse(response.body) as ApiErrorBody).error.code).toBe(
+      "PROJECT_NOT_ALLOWED"
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("构造时拒绝空队列地址或空项目白名单", () => {
     expect(() =>
       createIngestHandler({
         queueUrl: " ",
+        allowedProjectIds: ["demo-project"],
         sqsClient: { send: vi.fn() }
       })
     ).toThrow("queueUrl");
+    expect(() =>
+      createIngestHandler({
+        queueUrl:
+          "https://sqs.ap-northeast-1.amazonaws.com/123/ingest",
+        allowedProjectIds: [],
+        sqsClient: { send: vi.fn() }
+      })
+    ).toThrow("allowedProjectIds");
   });
 });
 
@@ -185,6 +210,7 @@ function createHandler(
   return createIngestHandler({
     queueUrl:
       "https://sqs.ap-northeast-1.amazonaws.com/123/ingest",
+    allowedProjectIds: ["demo-project"],
     sqsClient: { send } as SQSClientLike,
     now: () => new Date("2026-07-28T06:00:00.000Z")
   });

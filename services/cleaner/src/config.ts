@@ -3,6 +3,8 @@ export interface CleanerConfig {
   firehoseStreamName: string;
   waitTimeSeconds: number;
   maxMessages: number;
+  maxRuntimeMs: number;
+  emptyPollsBeforeExit: number;
 }
 
 export function loadConfig(
@@ -27,6 +29,19 @@ export function loadConfig(
     maxMessages: parseInteger(
       environment.SQS_MAX_MESSAGES,
       10,
+      1,
+      10
+    ),
+    maxRuntimeMs:
+      parseInteger(
+        environment.CLEANER_MAX_RUNTIME_SECONDS,
+        240,
+        30,
+        840
+      ) * 1_000,
+    emptyPollsBeforeExit: parseInteger(
+      environment.CLEANER_EMPTY_POLLS_BEFORE_EXIT,
+      2,
       1,
       10
     )

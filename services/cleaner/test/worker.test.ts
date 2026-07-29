@@ -85,6 +85,83 @@ describe("CleanerWorker", () => {
       failed: 0
     });
   });
+
+  it("连续两次空轮询后结束排空任务", async () => {
+    const sqsSend = vi.fn().mockResolvedValue({ Messages: [] });
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const worker = new CleanerWorker({
+      queueUrl: "https://sqs.example.com/queue",
+      sqsClient: {
+        receive: sqsSend,
+        delete: vi.fn()
+      },
+      firehoseWriter: { write: vi.fn() },
+      waitTimeSeconds: 0,
+      retryDelayMs: 0,
+      logger
+    });
+
+    await expect(
+      worker.runUntilDrained(new AbortController().signal, 2)
+    ).resolves.toEqual({
+      received: 0,
+      processed: 0,
+      failed: 0,
+      polls: 2,
+      pollFailures: 0
+    });
+    expect(sqsSend).toHaveBeenCalledTimes(2);
+  });
+
+  it("收到消息后重新计算连续空轮询次数", async () => {
+    const responses = [
+      { Messages: [] },
+      {
+        Messages: [
+          {
+            MessageId: "message-1",
+            ReceiptHandle: "receipt-1",
+            Body: JSON.stringify(ingestMessage)
+          }
+        ]
+      },
+      { Messages: [] },
+      { Messages: [] }
+    ];
+    const sqsSend = vi.fn(async (command: unknown) => {
+      if (command instanceof ReceiveMessageCommand) {
+        return responses.shift() ?? { Messages: [] };
+      }
+      return {};
+    });
+    const worker = new CleanerWorker({
+      queueUrl: "https://sqs.example.com/queue",
+      sqsClient: {
+        receive: sqsSend,
+        delete: sqsSend
+      },
+      firehoseWriter: { write: vi.fn().mockResolvedValue(undefined) },
+      waitTimeSeconds: 0,
+      retryDelayMs: 0,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn()
+      }
+    });
+
+    const summary = await worker.runUntilDrained(
+      new AbortController().signal,
+      2
+    );
+
+    expect(summary.polls).toBe(4);
+    expect(summary.processed).toBe(1);
+  });
 });
 
 function createWorker({

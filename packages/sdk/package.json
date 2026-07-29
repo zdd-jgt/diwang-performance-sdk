@@ -19,11 +19,11 @@
   },
   "scripts": {
     "acceptance:browser": "node browser-acceptance/server.mjs",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "build": "tsup --config tsup.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@diwang/contracts": "workspace:*"
   }
 }

@@ -1,5 +1,3 @@
-import type { TelemetryEvent } from "@diwang/contracts";
-
 export interface SDKOptions {
   /** 日志接收地址，仅允许 http/https。 */
   logUrl: string;
@@ -19,8 +17,11 @@ export interface SDKOptions {
   maxQueueSize?: number;
   /** 单页每分钟最多接收的事件数，默认 50。 */
   maxEventsPerMinute?: number;
-  /** 事件入队前的只读观察回调；回调异常会被 SDK 隔离。 */
-  onEvent?: (event: TelemetryEvent) => void;
+  /**
+   * 事件入队前的只读观察回调；事件遵循公共日志协议，
+   * 回调异常会被 SDK 隔离。
+   */
+  onEvent?: (event: Readonly<object>) => void;
 }
 
 export type MetricRating = "good" | "needs-improvement" | "poor";

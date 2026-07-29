@@ -34,4 +34,16 @@
 32. Firehose 使用 Glue 固定 Schema 将 JSON 转为 Snappy Parquet；S3 目标层保持 `UNCOMPRESSED`，压缩由 Parquet Serializer 负责。
 33. Glue 表使用日期分区投影，不每日创建 Partition；Athena 查询必须包含日期条件，并由 WorkGroup 强制结果位置、SSE-S3 和单查询扫描上限。
 34. Firehose 至少一次写入产生的重复记录不在存储层删除；Athena 去重视图按稳定 `recordId` 和最新 `receivedAt` 保留一条。
-35. 遥测数据桶和 Athena 结果桶均设置 `Retain`；结果对象 7 天过期，数据桶不自动删除，避免未经确认的数据销毁。
+35. 遥测数据桶和 Athena 结果桶均设置 `Retain`；Stack 删除不会删除桶，桶内对象仍按各自生命周期清理。
+36. 生产接入项目固定为 `hono-sam-aws-learning`，页面来源固定为 `https://hono-sam-profile.pages.dev`；项目白名单和 CORS 不视为强身份认证。
+37. 性能会话采样率为 10%，错误事件保持采集，但仍受 SDK 单页事件限流约束。
+38. SDK 以自包含 `.tgz` 放入业务前端 `vendor/`，Cloudflare 构建不依赖本机绝对路径或未发布的 npm 包。
+39. Cloudflare Pages 使用 `CF_PAGES_COMMIT_SHA` 作为 SDK `release`，本地构建回退为 `local`。
+40. Cleaner 不采用 24 小时 ECS Service，改为 EventBridge Scheduler 每 5 分钟启动一个 Fargate Task。
+41. Cleaner 连续 2 次空轮询后退出，单次最多运行 240 秒；处理成功才删除 SQS 消息。
+42. 现有私有子网 NAT 已失效，学习阶段 Cleaner 使用现有公网子网、临时公网 IP和零入站独立安全组。
+43. 第一版继续按服务端接收日期分区，不细分小时；Firehose 使用 64 MB 或 5 分钟缓冲。
+44. 第 35 条原“遥测数据不自动过期”策略已调整：遥测对象 30 天、Athena 结果 7 天、CloudWatch 日志 14 天。
+45. 生产部署采用手动 CloudFormation Change Set；Cleaner Scheduler 首次部署默认禁用，镜像和手动 Task 验收通过后再单独启用。
+46. 当前 AWS 账号 Lambda 总并发额度为 5，无法设置任何预留并发；Ingest 使用共享并发，并由 HTTP API 路由限流和账号并发上限控制入口负载，后续提高账号额度后再评估独立预留并发。
+47. Firehose `OpenXJsonSerDe` 必须启用 `CaseInsensitive=true`，因为 Glue 会把 camelCase Schema 列规范为小写；关闭后 Parquet 只保留分区值，其余业务列均为 `NULL`。

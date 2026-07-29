@@ -62,6 +62,24 @@ describe("template-storage.yaml", () => {
       });
     }
     expect(
+      resource("TelemetryDataBucket").Properties?.LifecycleConfiguration
+    ).toMatchObject({
+      Rules: [
+        expect.objectContaining({
+          Id: "ExpireTelemetryData",
+          Status: "Enabled",
+          ExpirationInDays: {
+            Ref: "TelemetryRetentionDays"
+          }
+        })
+      ]
+    });
+    expect(parameter("TelemetryRetentionDays")).toMatchObject({
+      Default: 30,
+      MinValue: 1,
+      MaxValue: 3650
+    });
+    expect(
       resource("AthenaResultsBucket").Properties?.LifecycleConfiguration
     ).toMatchObject({
       Rules: [
@@ -139,6 +157,11 @@ describe("template-storage.yaml", () => {
       ?.ExtendedS3DestinationConfiguration as Record<string, unknown>;
     const conversion = destination.DataFormatConversionConfiguration as {
       Enabled?: boolean;
+      InputFormatConfiguration?: {
+        Deserializer?: {
+          OpenXJsonSerDe?: Record<string, unknown>;
+        };
+      };
       OutputFormatConfiguration?: {
         Serializer?: {
           ParquetSerDe?: Record<string, unknown>;
@@ -179,6 +202,13 @@ describe("template-storage.yaml", () => {
       }
     ]);
     expect(conversion.Enabled).toBe(true);
+    expect(
+      conversion.InputFormatConfiguration?.Deserializer
+        ?.OpenXJsonSerDe
+    ).toMatchObject({
+      CaseInsensitive: true,
+      ConvertDotsInJsonKeysToUnderscores: false
+    });
     expect(
       conversion.OutputFormatConfiguration?.Serializer?.ParquetSerDe
     ).toMatchObject({

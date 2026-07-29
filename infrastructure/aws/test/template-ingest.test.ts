@@ -58,9 +58,16 @@ describe("template-ingest.yaml", () => {
     expect(JSON.stringify(api?.AccessLogSettings)).not.toContain(
       "sourceIp"
     );
+    expect(api?.CorsConfiguration).toMatchObject({
+      AllowOrigins: [{ Ref: "AllowedOrigin" }],
+      AllowMethods: ["POST", "OPTIONS"],
+      AllowHeaders: ["content-type"]
+    });
+    expect(template.Parameters.AllowedOrigin?.Default).toBeUndefined();
+    expect(JSON.stringify(api?.CorsConfiguration)).not.toContain('"*"');
   });
 
-  it("Lambda 只获得目标队列 SendMessage 权限", () => {
+  it("Lambda 配置项目白名单且只获得目标队列 SendMessage 权限", () => {
     const functionProperties =
       template.Resources.IngestFunction?.Properties;
     const policy = functionProperties?.Policies?.[0];
@@ -70,10 +77,14 @@ describe("template-ingest.yaml", () => {
       CodeUri: "../../services/ingest/dist/",
       Environment: {
         Variables: {
-          INGEST_QUEUE_URL: { Ref: "IngestQueue" }
+          INGEST_QUEUE_URL: { Ref: "IngestQueue" },
+          ALLOWED_PROJECT_IDS: { Ref: "AllowedProjectId" }
         }
       }
     });
+    expect(
+      functionProperties?.ReservedConcurrentExecutions
+    ).toBeUndefined();
     expect(policy?.Statement).toEqual([
       expect.objectContaining({
         Effect: "Allow",
@@ -108,5 +119,9 @@ interface CloudFormationResource {
 
 interface CloudFormationTemplate {
   Transform?: string;
+  Parameters: Record<
+    string,
+    { Default?: unknown } | undefined
+  >;
   Resources: Record<string, CloudFormationResource | undefined>;
 }

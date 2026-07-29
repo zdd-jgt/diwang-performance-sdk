@@ -12,12 +12,13 @@ async function main(): Promise<void> {
   const stop = () => controller.abort();
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
+  const runtimeTimer = setTimeout(stop, config.maxRuntimeMs);
   const sqsClient = new SQSClient({});
 
   const worker = new CleanerWorker({
     queueUrl: config.queueUrl,
     sqsClient: {
-      receive: (command) => sqsClient.send(command),
+      receive: (command, options) => sqsClient.send(command, options),
       delete: (command) => sqsClient.send(command)
     },
     firehoseWriter: new FirehoseWriter({
@@ -29,8 +30,12 @@ async function main(): Promise<void> {
   });
 
   try {
-    await worker.run(controller.signal);
+    await worker.runUntilDrained(
+      controller.signal,
+      config.emptyPollsBeforeExit
+    );
   } finally {
+    clearTimeout(runtimeTimer);
     process.removeListener("SIGTERM", stop);
     process.removeListener("SIGINT", stop);
   }

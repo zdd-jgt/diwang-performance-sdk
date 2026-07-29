@@ -13,12 +13,14 @@ export interface SQSClientLike {
 
 export interface IngestHandlerDependencies {
   queueUrl: string;
+  allowedProjectIds: readonly string[];
   sqsClient: SQSClientLike;
   now?: () => Date;
 }
 
 export function createIngestHandler({
   queueUrl,
+  allowedProjectIds,
   sqsClient,
   now = () => new Date()
 }: IngestHandlerDependencies): (
@@ -26,6 +28,15 @@ export function createIngestHandler({
 ) => Promise<HttpApiResponse> {
   if (!queueUrl.trim()) {
     throw new TypeError("queueUrl 不能为空");
+  }
+  const allowedProjects = new Set(
+    allowedProjectIds.map((projectId) => projectId.trim())
+  );
+  if (
+    allowedProjects.size === 0 ||
+    allowedProjects.has("")
+  ) {
+    throw new TypeError("allowedProjectIds 不能为空");
   }
 
   return async (event) => {
@@ -77,6 +88,18 @@ export function createIngestHandler({
         422,
         "INVALID_BATCH",
         "日志批次不符合协议"
+      );
+    }
+    if (
+      parsed.data.events.some(
+        (telemetryEvent) =>
+          !allowedProjects.has(telemetryEvent.projectId)
+      )
+    ) {
+      return errorResponse(
+        403,
+        "PROJECT_NOT_ALLOWED",
+        "项目不允许写入该日志接收端"
       );
     }
 

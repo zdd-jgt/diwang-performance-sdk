@@ -18,7 +18,11 @@ export async function handler(
   event: HttpApiEvent
 ): Promise<HttpApiResponse> {
   const queueUrl = process.env.INGEST_QUEUE_URL?.trim();
-  if (!queueUrl) {
+  const allowedProjectIds = process.env.ALLOWED_PROJECT_IDS
+    ?.split(",")
+    .map((projectId) => projectId.trim())
+    .filter(Boolean);
+  if (!queueUrl || !allowedProjectIds?.length) {
     return errorResponse(
       500,
       "SERVER_MISCONFIGURED",
@@ -29,6 +33,7 @@ export async function handler(
   sqsClient ??= new SQSClient({});
   return createIngestHandler({
     queueUrl,
+    allowedProjectIds,
     sqsClient
   })(event);
 }

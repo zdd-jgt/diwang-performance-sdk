@@ -1,0 +1,381 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: diwang scheduled ECS Fargate telemetry cleaner - prepare only
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: diwang-performance
+    MaxLength: 43
+    AllowedPattern: "^[a-z0-9-]+$"
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - dev
+      - staging
+      - production
+  EcsClusterName:
+    Type: String
+    Default: hono-sam-cluster
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetId:
+    Type: AWS::EC2::Subnet::Id
+  IngestQueueUrl:
+    Type: String
+    AllowedPattern: "^https://sqs\\.[A-Za-z0-9.-]+/.*$"
+  IngestQueueArn:
+    Type: String
+    AllowedPattern: "^arn:[A-Za-z0-9-]+:sqs:.*$"
+  FirehoseDeliveryStreamName:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9_.-]+$"
+  FirehoseDeliveryStreamArn:
+    Type: String
+    AllowedPattern: "^arn:[A-Za-z0-9-]+:firehose:.*$"
+  CleanerImageTag:
+    Type: String
+    Default: "0.1.0"
+    AllowedPattern: "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+  ScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues:
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+
+Resources:
+  CleanerRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName:
+        Fn::Sub: "${ProjectName}-${Environment}-cleaner"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep latest 10 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan",
+          "countNumber":10},"action":{"type":"expire"}}]}
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  CleanerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName:
+        Fn::Sub: "/aws/ecs/${ProjectName}-${Environment}-cleaner"
+      RetentionInDays:
+        Ref: LogRetentionDays
+
+  CleanerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS-only egress for scheduled telemetry cleaner
+      VpcId:
+        Ref: VpcId
+      SecurityGroupEgress:
+        - Description: AWS service HTTPS endpoints
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub: "${ProjectName}-${Environment}-cleaner"
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  CleanerTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: PullCleanerImageAndWriteLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: GetEcrAuthorizationToken
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: PullOnlyCleanerImage
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource:
+                  Fn::GetAtt:
+                    - CleanerRepository
+                    - Arn
+              - Sid: WriteOnlyCleanerLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::Sub: "${CleanerLogGroup.Arn}:*"
+
+  CleanerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: ConsumeIngestQueueAndWriteFirehose
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsumeOnlyIngestQueue
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                Resource:
+                  Ref: IngestQueueArn
+              - Sid: WriteOnlyTelemetryStream
+                Effect: Allow
+                Action:
+                  - firehose:PutRecordBatch
+                Resource:
+                  Ref: FirehoseDeliveryStreamArn
+
+  CleanerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family:
+        Fn::Sub: "${ProjectName}-${Environment}-cleaner"
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - CleanerTaskExecutionRole
+          - Arn
+      TaskRoleArn:
+        Fn::GetAtt:
+          - CleanerTaskRole
+          - Arn
+      ContainerDefinitions:
+        - Name: cleaner
+          Image:
+            Fn::Sub: "${CleanerRepository.RepositoryUri}:${CleanerImageTag}"
+          Essential: true
+          ReadonlyRootFilesystem: true
+          StopTimeout: 30
+          LinuxParameters:
+            InitProcessEnabled: true
+          Environment:
+            - Name: INGEST_QUEUE_URL
+              Value:
+                Ref: IngestQueueUrl
+            - Name: FIREHOSE_STREAM_NAME
+              Value:
+                Ref: FirehoseDeliveryStreamName
+            - Name: SQS_WAIT_TIME_SECONDS
+              Value: "20"
+            - Name: SQS_MAX_MESSAGES
+              Value: "10"
+            - Name: CLEANER_MAX_RUNTIME_SECONDS
+              Value: "240"
+            - Name: CLEANER_EMPTY_POLLS_BEFORE_EXIT
+              Value: "2"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: CleanerLogGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix: cleaner
+              mode: non-blocking
+              max-buffer-size: 1m
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  CleanerScheduleDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: "${ProjectName}-${Environment}-cleaner-schedule-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Project
+          Value:
+            Ref: ProjectName
+        - Key: Environment
+          Value:
+            Ref: Environment
+
+  CleanerScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - scheduler.amazonaws.com
+            Action:
+              - sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+      Policies:
+        - PolicyName: RunOnlyCleanerTask
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: RunCleanerTask
+                Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource:
+                  Ref: CleanerTaskDefinition
+                Condition:
+                  ArnEquals:
+                    ecs:cluster:
+                      Fn::Sub: >-
+                        arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${EcsClusterName}
+              - Sid: PassOnlyCleanerRoles
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - Fn::GetAtt:
+                      - CleanerTaskExecutionRole
+                      - Arn
+                  - Fn::GetAtt:
+                      - CleanerTaskRole
+                      - Arn
+              - Sid: WriteScheduleFailures
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource:
+                  Fn::GetAtt:
+                    - CleanerScheduleDeadLetterQueue
+                    - Arn
+
+  CleanerSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name:
+        Fn::Sub: "${ProjectName}-${Environment}-cleaner"
+      Description: Drain telemetry SQS into Firehose every five minutes
+      ScheduleExpression: rate(5 minutes)
+      State:
+        Ref: ScheduleState
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn:
+          Fn::Sub: >-
+            arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${EcsClusterName}
+        RoleArn:
+          Fn::GetAtt:
+            - CleanerScheduleRole
+            - Arn
+        DeadLetterConfig:
+          Arn:
+            Fn::GetAtt:
+              - CleanerScheduleDeadLetterQueue
+              - Arn
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 300
+          MaximumRetryAttempts: 1
+        EcsParameters:
+          LaunchType: FARGATE
+          PlatformVersion: LATEST
+          TaskCount: 1
+          TaskDefinitionArn:
+            Ref: CleanerTaskDefinition
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              AssignPublicIp: ENABLED
+              SecurityGroups:
+                - Fn::GetAtt:
+                    - CleanerSecurityGroup
+                    - GroupId
+              Subnets:
+                - Ref: PublicSubnetId
+
+Outputs:
+  CleanerRepositoryUri:
+    Description: Retained ECR repository used for the Cleaner image
+    Value:
+      Fn::GetAtt:
+        - CleanerRepository
+        - RepositoryUri
+  CleanerTaskDefinitionArn:
+    Description: Scheduled Cleaner ECS task definition
+    Value:
+      Ref: CleanerTaskDefinition
+  CleanerScheduleName:
+    Description: EventBridge Scheduler schedule name
+    Value:
+      Ref: CleanerSchedule
+  CleanerSecurityGroupId:
+    Description: Dedicated no-ingress Cleaner security group
+    Value:
+      Fn::GetAtt:
+        - CleanerSecurityGroup
+        - GroupId
