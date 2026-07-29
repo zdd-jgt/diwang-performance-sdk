@@ -4,19 +4,19 @@
 
 - 目标环境：`production`，Region 为 `ap-northeast-1`。
 - 模式：`requires-confirmation`，已于 2026-07-29 获得用户确认并执行。
-- Stack：`diwang-performance-production-cleaner`，当前状态为 `CREATE_COMPLETE`。
+- Stack：`diwang-performance-production-cleaner`，当前状态为 `UPDATE_COMPLETE`。
 - ECR、IAM、ECS Task Definition、Scheduler、DLQ、日志组和安全组已创建；镜像 `0.1.0` 已推送，手动 Task 验收已完成。
 - 复用现有 `hono-sam-cluster` 和 VPC；不使用已失效 NAT 的私有子网。
 - 使用同一 VPC 的公网子网，Fargate Task 启动时分配临时公网 IP。
 
 ## 运行行为
 
-- EventBridge Scheduler 每 5 分钟启动 1 个 Fargate Task。
+- EventBridge Scheduler 使用 `Asia/Shanghai` 时区，每天凌晨 02:00 启动 1 个 Fargate Task。
 - Task 使用 0.25 vCPU、512 MiB、Linux ARM64。
 - 连续 2 次 SQS 长轮询为空后退出，最多运行 240 秒。
 - 安全组不允许任何入站，仅允许 TCP 443 出站。
 - Cleaner 只获得目标 SQS 的消费权限和目标 Firehose 的 `PutRecordBatch` 权限。
-- Scheduler 默认 `DISABLED`，必须在镜像推送和手动验收后单独启用。
+- Scheduler 模板默认 `DISABLED`；镜像、手动 Task 和前端上报验收通过后，生产环境已单独启用。
 
 ## 安全部署顺序
 
@@ -57,11 +57,13 @@ SAM_CLI_TELEMETRY=0 sam validate --lint --template-file infrastructure/aws/templ
 
 ## 本次部署结果
 
-- Scheduler 已确认为 `DISABLED`，不会自动启动 Fargate Task。
+- Scheduler 已确认为 `ENABLED`，使用 `cron(0 2 * * ? *)` 和 `Asia/Shanghai` 时区，每天自动启动一次 Fargate Task。
 - ECR 使用 AES256、不可变标签和推送扫描；`0.1.0` 已确认为 `linux/arm64`、约 58 MB，扫描状态为 `COMPLETE` 且没有发现项。
 - 安全组无入站规则，仅允许 TCP 443 出站。
 - 首次 ECR push 长时间无输出且远端没有形成标签，终止后核对主机和 Docker 到 ECR 的认证连通性，再次推送成功。
 - 手动 Task 退出码为 0，日志统计 `received=1`、`processed=1`、`failed=0`；主队列与 DLQ 均为 0。
 - Firehose 在约 5 分钟缓冲后写入 `partition_date=2026-07-29`；首次文件因 SerDe 大小写缺陷业务列为 `NULL`。
 - Storage 修复后第二次手动 Task 同样以退出码 0 完成，`received=1`、`processed=1`、`failed=0`，生成 4,550 字节的新 Parquet。
-- Athena 精确查询已成功读取完整合成字段；Scheduler 继续保持禁用。
+- Athena 精确查询已成功读取完整合成字段；随后完成 Cloudflare 真实 SDK 上报验收并启用 Scheduler。
+- 2026-07-29 按再次授权手动运行 1 个真实数据验收 Task：退出码 0，`received=2`、`processed=2`、`failed=0`；主队列由 2 归零，Ingest DLQ 保持 0。
+- Firehose 缓冲后生成 6,186 字节新 Parquet；本地「地网」Query API 与 Athena 成功展示真实 Hono 页面数据。此次未修改 Scheduler、网络、IAM 或其他 AWS 配置。

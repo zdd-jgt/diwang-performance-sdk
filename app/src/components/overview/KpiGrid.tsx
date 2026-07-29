@@ -10,31 +10,31 @@ export function KpiGrid({ overview }: KpiGridProps) {
   const items = [
     {
       key: "events",
-      label: "TOTAL EVENTS",
+      label: "事件总量",
       title: "事件总量",
       value: NUMBER_FORMATTER.format(overview.totalEvents),
-      suffix: "records",
+      suffix: "条",
       tone: "cyan"
     },
     {
       key: "sessions",
-      label: "ACTIVE SESSIONS",
+      label: "活跃会话",
       title: "会话数",
       value: NUMBER_FORMATTER.format(overview.sessions),
-      suffix: "sessions",
+      suffix: "次",
       tone: "blue"
     },
     {
       key: "errors",
-      label: "ERROR SIGNALS",
+      label: "错误信号",
       title: "错误数",
       value: NUMBER_FORMATTER.format(overview.errors),
-      suffix: "events",
+      suffix: "条",
       tone: "purple"
     },
     {
       key: "error-rate",
-      label: "ERROR RATIO",
+      label: "错误占比",
       title: "错误率",
       value: overview.errorRate.toFixed(2),
       suffix: "%",

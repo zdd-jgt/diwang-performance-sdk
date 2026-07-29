@@ -9,6 +9,7 @@ interface DashboardFiltersProps {
   projectId: string;
   range: DashboardRange;
   scenario: MockScenario;
+  mockMode: boolean;
   loading: boolean;
   onProjectChange: (value: string) => void;
   onRangeChange: (value: DashboardRange) => void;
@@ -33,6 +34,7 @@ export function DashboardFilters({
   projectId,
   range,
   scenario,
+  mockMode,
   loading,
   onProjectChange,
   onRangeChange,
@@ -40,17 +42,17 @@ export function DashboardFilters({
   onRefresh
 }: DashboardFiltersProps) {
   return (
-    <section className="filter-console" aria-label="Dashboard 筛选条件">
+    <section className="filter-console" aria-label="数据面板筛选条件">
       <div className="filter-console__title">
         <span aria-hidden="true">⌁</span>
         <div>
-          <strong>QUERY CONTROL</strong>
-          <small>配置分析范围与模拟场景</small>
+          <strong>查询控制</strong>
+          <small>{mockMode ? "配置分析范围与模拟场景" : "配置真实数据分析范围"}</small>
         </div>
       </div>
 
       <label className="filter-field">
-        <span>PROJECT</span>
+        <span>项目</span>
         <select
           aria-label="选择项目"
           value={projectId}
@@ -67,7 +69,7 @@ export function DashboardFilters({
       </label>
 
       <label className="filter-field">
-        <span>TIME RANGE</span>
+        <span>时间范围</span>
         <select
           aria-label="选择时间范围"
           value={range}
@@ -83,22 +85,24 @@ export function DashboardFilters({
         </select>
       </label>
 
-      <label className="filter-field">
-        <span>DEMO SCENARIO</span>
-        <select
-          aria-label="选择演示场景"
-          value={scenario}
-          onChange={(event) =>
-            onScenarioChange(event.target.value as MockScenario)
-          }
-        >
-          {SCENARIO_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {mockMode ? (
+        <label className="filter-field">
+          <span>演示场景</span>
+          <select
+            aria-label="选择演示场景"
+            value={scenario}
+            onChange={(event) =>
+              onScenarioChange(event.target.value as MockScenario)
+            }
+          >
+            {SCENARIO_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <button
         className="refresh-button"
@@ -107,7 +111,7 @@ export function DashboardFilters({
         onClick={onRefresh}
       >
         <span aria-hidden="true">↻</span>
-        {loading ? "QUERYING" : "REFRESH DATA"}
+        {loading ? "查询中" : "刷新数据"}
       </button>
     </section>
   );

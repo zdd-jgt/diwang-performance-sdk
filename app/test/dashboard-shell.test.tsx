@@ -78,7 +78,10 @@ describe("Dashboard 页面骨架", () => {
   it("默认使用 7 天范围并展示 KPI", async () => {
     render(<App />);
 
-    expect(screen.getByText("Athena Query Running")).toBeTruthy();
+    expect(screen.getByText("Athena 查询执行中")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "地网 数据分析面板" })).toBeTruthy();
+    expect(screen.getByText("真实数据 · 半实时")).toBeTruthy();
+    expect(screen.queryByLabelText("选择演示场景")).toBeNull();
     const overview = await screen.findByRole("region", { name: "性能概览" });
     expect(within(overview).getByText("48,200")).toBeTruthy();
     expect(within(overview).getByText("14,942")).toBeTruthy();
@@ -89,8 +92,7 @@ describe("Dashboard 页面骨架", () => {
       expect(mockSnapshot).toHaveBeenCalledWith(
         expect.objectContaining({
           projectId: "shop-web",
-          range: "7d",
-          scenario: "success"
+          range: "7d"
         }),
         expect.any(AbortSignal)
       );
@@ -148,6 +150,6 @@ describe("Dashboard 页面骨架", () => {
     render(<App />);
 
     expect(await screen.findByText("当前范围没有可分析数据")).toBeTruthy();
-    expect(screen.queryByText("TOTAL EVENTS")).toBeNull();
+    expect(screen.queryByText("事件总量")).toBeNull();
   });
 });

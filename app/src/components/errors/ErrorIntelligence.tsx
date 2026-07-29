@@ -15,10 +15,10 @@ const KIND_META: Record<
   { label: string; shortLabel: string }
 > = {
   js: { label: "JavaScript 异常", shortLabel: "JS" },
-  resource: { label: "资源加载失败", shortLabel: "RESOURCE" },
+  resource: { label: "资源加载失败", shortLabel: "资源" },
   unhandled_rejection: {
     label: "Promise 未处理",
-    shortLabel: "PROMISE"
+    shortLabel: "Promise"
   }
 };
 
@@ -67,7 +67,7 @@ export function ErrorIntelligence({
       </div>
 
       <div className="error-list__heading">
-        <span>RECENT ERROR SAMPLES</span>
+        <span>最近错误样本</span>
         <b>{errors.length} 条脱敏样本</b>
       </div>
 
@@ -98,4 +98,3 @@ export function ErrorIntelligence({
     </div>
   );
 }
-

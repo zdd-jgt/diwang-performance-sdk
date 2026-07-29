@@ -110,7 +110,7 @@ describe("template-cleaner.yaml", () => {
     ]);
   });
 
-  it("Scheduler 默认禁用并每五分钟启动一个公网 Fargate Task", () => {
+  it("Scheduler 默认禁用并在北京时间每天 02:00 启动一个公网 Fargate Task", () => {
     expect(template.Parameters.ScheduleState).toMatchObject({
       Default: "DISABLED",
       AllowedValues: ["ENABLED", "DISABLED"]
@@ -120,7 +120,8 @@ describe("template-cleaner.yaml", () => {
     const ecs = target.EcsParameters as Record<string, unknown>;
 
     expect(schedule).toMatchObject({
-      ScheduleExpression: "rate(5 minutes)",
+      ScheduleExpression: "cron(0 2 * * ? *)",
+      ScheduleExpressionTimezone: "Asia/Shanghai",
       State: { Ref: "ScheduleState" },
       FlexibleTimeWindow: { Mode: "OFF" }
     });

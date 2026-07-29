@@ -1,0 +1,24 @@
+{
+  "name": "@diwang/query-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "地网本地 Athena Dashboard Query API",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/server.mjs",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "dev": "pnpm build && node --env-file-if-exists=.env dist/server.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-athena": "3.1096.0",
+    "@diwang/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1"
+  }
+}

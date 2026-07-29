@@ -47,3 +47,8 @@
 45. 生产部署采用手动 CloudFormation Change Set；Cleaner Scheduler 首次部署默认禁用，镜像和手动 Task 验收通过后再单独启用。
 46. 当前 AWS 账号 Lambda 总并发额度为 5，无法设置任何预留并发；Ingest 使用共享并发，并由 HTTP API 路由限流和账号并发上限控制入口负载，后续提高账号额度后再评估独立预留并发。
 47. Firehose `OpenXJsonSerDe` 必须启用 `CaseInsensitive=true`，因为 Glue 会把 camelCase Schema 列规范为小写；关闭后 Parquet 只保留分区值，其余业务列均为 `NULL`。
+48. 第 40 条原每 5 分钟运行 Cleaner 的策略调整为 `Asia/Shanghai` 时区每天凌晨 02:00 执行一次，降低低流量学习阶段的空 Task 与公网 IPv4 费用。
+49. 「地网」Dashboard 默认通过仅监听 `127.0.0.1` 的 Query API 查询真实 Athena；Mock 只在显式 `mock` 模式启用，浏览器不持有 AWS 凭据。
+50. Query API 第一版只允许 `hono-sam-aws-learning`，全部 SQL 强制项目、日期分区和接收时间过滤，并对相同项目与范围缓存 60 秒。
+51. Dashboard 产品名称统一为「地网」，可中文化界面使用中文，LCP、CLS、INP、Athena 等标准技术名词保留中文上下文。
+52. Glue 的 `clientTimestamp` 为 bigint 毫秒时间戳；Athena 错误详情查询必须先转换为 UTC ISO 字符串，不能与 varchar `receivedAt` 直接 `coalesce`。

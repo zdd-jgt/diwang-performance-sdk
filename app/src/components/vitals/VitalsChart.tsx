@@ -25,21 +25,21 @@ const METRICS: Array<{
 }> = [
   {
     name: "LCP",
-    label: "Largest Contentful Paint",
+    label: "最大内容绘制",
     unit: "ms",
     good: 2_500,
     poor: 4_000
   },
   {
     name: "CLS",
-    label: "Cumulative Layout Shift",
+    label: "累积布局偏移",
     unit: "",
     good: 0.1,
     poor: 0.25
   },
   {
     name: "INP",
-    label: "Interaction to Next Paint",
+    label: "交互到下次绘制",
     unit: "ms",
     good: 200,
     poor: 500
@@ -272,7 +272,7 @@ export function VitalsChart({ points, range }: VitalsChartProps) {
         </div>
 
         <div className={`metric-reading metric-reading--${latestStatus}`}>
-          <span>LATEST P95</span>
+          <span>最新 P95</span>
           <strong>
             {latestPoint
               ? formatMetricValue(activeMetric, latestPoint.p95)
@@ -299,7 +299,7 @@ export function VitalsChart({ points, range }: VitalsChartProps) {
             {metricPoints
               .reduce((sum, point) => sum + point.sampleCount, 0)
               .toLocaleString("zh-CN")}{" "}
-            SAMPLES
+            个样本
           </b>
         </div>
 

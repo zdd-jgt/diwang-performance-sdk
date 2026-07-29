@@ -5,9 +5,9 @@ interface SlowPageRankingProps {
 }
 
 const RATING_LABELS = {
-  good: "GOOD",
-  "needs-improvement": "NEEDS WORK",
-  poor: "POOR"
+  good: "良好",
+  "needs-improvement": "待改进",
+  poor: "较差"
 } as const;
 
 export function rankSlowPages(
@@ -38,8 +38,8 @@ export function SlowPageRanking({ pages }: SlowPageRankingProps) {
     <div className="slow-pages">
       <div className="slow-pages__summary">
         <div>
-          <span>RANKING BASIS</span>
-          <strong>LCP P95 / TOP 10</strong>
+          <span>排名依据</span>
+          <strong>LCP P95 / 前 10 名</strong>
         </div>
         <b>{rankedPages.length.toString().padStart(2, "0")}</b>
       </div>
@@ -64,7 +64,7 @@ export function SlowPageRanking({ pages }: SlowPageRankingProps) {
                 </div>
               </div>
               <div className="slow-page__visits">
-                <span>VISITS</span>
+                <span>访问量</span>
                 <strong>{page.visits.toLocaleString("zh-CN")}</strong>
               </div>
               <div className={`slow-page__metric rating--${page.rating}`}>

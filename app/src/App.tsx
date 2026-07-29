@@ -20,6 +20,8 @@ import { KpiGrid } from "./components/overview/KpiGrid";
 import { SlowPageRanking } from "./components/slow-pages/SlowPageRanking";
 import { VitalsChart } from "./components/vitals/VitalsChart";
 
+const IS_MOCK_MODE = import.meta.env.MODE === "mock";
+
 type SnapshotState =
   | { status: "idle" | "loading"; data?: DashboardSnapshot }
   | { status: "success"; data: DashboardSnapshot }
@@ -84,7 +86,7 @@ export function App() {
       {
         projectId,
         range,
-        scenario
+        ...(IS_MOCK_MODE ? { scenario } : {})
       },
       controller.signal
     )
@@ -120,12 +122,12 @@ export function App() {
 
   const statusLabel =
     snapshotState.status === "loading"
-      ? "QUERYING"
+      ? "查询中"
       : snapshotState.status === "error"
-        ? "DEGRADED"
+        ? "服务异常"
         : snapshotState.status === "success"
-          ? "SYNCHRONIZED"
-          : "INITIALIZING";
+          ? "数据已同步"
+          : "初始化中";
 
   return (
     <div className="dashboard-page">
@@ -147,9 +149,9 @@ export function App() {
 
         <header className="dashboard-header">
           <div>
-            <p className="eyebrow">DIWANG OBSERVABILITY / ANALYTICS NODE</p>
+            <p className="eyebrow">地网 · 前端性能观测与分析节点</p>
             <h1>
-              Performance <span>Matrix</span>
+              地网 <span>数据分析面板</span>
             </h1>
             <p className="header-description">
               基于 Athena 半实时数据的 Web Vitals 与错误分析
@@ -161,12 +163,12 @@ export function App() {
               <span />
             </div>
             <div>
-              <span className="system-status__label">SYSTEM STATUS</span>
+              <span className="system-status__label">系统状态</span>
               <strong>{statusLabel}</strong>
             </div>
             <div className="system-status__meta">
               <span>数据延迟</span>
-              <b>{snapshot?.freshnessMinutes ?? "--"} MIN</b>
+              <b>{snapshot?.freshnessMinutes ?? "--"} 分钟</b>
             </div>
           </div>
         </header>
@@ -176,6 +178,7 @@ export function App() {
           projectId={projectId}
           range={range}
           scenario={scenario}
+          mockMode={IS_MOCK_MODE}
           loading={snapshotState.status === "loading"}
           onProjectChange={setProjectId}
           onRangeChange={setRange}
@@ -185,17 +188,17 @@ export function App() {
 
         <div className="context-strip" aria-label="当前查询上下文">
           <span>
-            ACTIVE PROJECT <strong>{currentProjectName}</strong>
+            当前项目 <strong>{currentProjectName}</strong>
           </span>
           <span>
-            AGGREGATION{" "}
-            <strong>{snapshot?.granularity === "hour" ? "HOURLY" : "DAILY"}</strong>
+            聚合粒度{" "}
+            <strong>{snapshot?.granularity === "hour" ? "按小时" : "按天"}</strong>
           </span>
           <span>
-            LAST UPDATED <strong>{formatUpdatedAt(snapshot?.generatedAt)}</strong>
+            最近更新 <strong>{formatUpdatedAt(snapshot?.generatedAt)}</strong>
           </span>
           <span className="context-strip__live">
-            <i aria-hidden="true" /> SEMI-REALTIME
+            <i aria-hidden="true" /> {IS_MOCK_MODE ? "模拟数据" : "真实数据 · 半实时"}
           </span>
         </div>
 
@@ -212,7 +215,7 @@ export function App() {
         {!projectError && (!projectId || snapshotState.status === "loading") ? (
           <QueryStatePanel
             tone="loading"
-            title="Athena Query Running"
+            title="Athena 查询执行中"
             description="正在聚合性能分位数与错误样本，预计需要 1–5 秒。"
           />
         ) : null}
@@ -231,7 +234,11 @@ export function App() {
           <QueryStatePanel
             tone="empty"
             title="当前范围没有可分析数据"
-            description="可以切换项目或时间范围，也可以将演示场景改回“正常数据”。"
+            description={
+              IS_MOCK_MODE
+                ? "可以切换项目、时间范围，或将演示场景改回“正常数据”。"
+                : "可以切换项目或时间范围；新日志完成清洗并写入 Athena 后再刷新查看。"
+            }
           />
         ) : null}
 
@@ -242,18 +249,18 @@ export function App() {
             <section className="analysis-grid" aria-label="数据分析区域">
               <HudPanel
                 className="analysis-grid__vitals"
-                title="Core Web Vitals"
+                title="核心 Web Vitals"
                 code="NODE-01"
                 accent
               >
                 <VitalsChart points={snapshot.vitals} range={range} />
               </HudPanel>
 
-              <HudPanel title="Slow Page Radar" code="NODE-02">
+              <HudPanel title="慢页面排行" code="NODE-02">
                 <SlowPageRanking pages={snapshot.slowPages} />
               </HudPanel>
 
-              <HudPanel title="Error Intelligence" code="NODE-03">
+              <HudPanel title="错误分析" code="NODE-03">
                 <ErrorIntelligence
                   breakdown={snapshot.errorBreakdown}
                   errors={snapshot.errors}
@@ -270,8 +277,12 @@ export function App() {
         />
 
         <footer className="dashboard-footer">
-          <span>DIWANG PERFORMANCE SDK / LOCAL LEARNING CONSOLE</span>
-          <span>MOCK QUERY API · NO AWS CREDENTIALS</span>
+          <span>地网 PERFORMANCE SDK / 本地学习控制台</span>
+          <span>
+            {IS_MOCK_MODE
+              ? "模拟数据模式 · 浏览器不保存 AWS 凭证"
+              : "真实 Athena 数据 · 浏览器不保存 AWS 凭证"}
+          </span>
         </footer>
       </div>
     </div>

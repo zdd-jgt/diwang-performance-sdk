@@ -36,9 +36,11 @@ export async function fetchDashboardSnapshot(
 ): Promise<DashboardSnapshot> {
   const search = new URLSearchParams({
     projectId: query.projectId,
-    range: query.range,
-    scenario: query.scenario ?? "success"
+    range: query.range
   });
+  if (import.meta.env.MODE === "mock") {
+    search.set("scenario", query.scenario ?? "success");
+  }
   const response = await fetch(`/api/dashboard/snapshot?${search}`, {
     signal
   });

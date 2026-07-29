@@ -320,8 +320,9 @@ Resources:
     Properties:
       Name:
         Fn::Sub: "${ProjectName}-${Environment}-cleaner"
-      Description: Drain telemetry SQS into Firehose every five minutes
-      ScheduleExpression: rate(5 minutes)
+      Description: Drain telemetry SQS into Firehose daily at 02:00 Asia/Shanghai
+      ScheduleExpression: cron(0 2 * * ? *)
+      ScheduleExpressionTimezone: Asia/Shanghai
       State:
         Ref: ScheduleState
       FlexibleTimeWindow:

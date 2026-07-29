@@ -24,7 +24,7 @@ export function QueryStatePanel({
         <span />
       </div>
       <div>
-        <p>{tone === "loading" ? "QUERY PIPELINE" : "QUERY RESPONSE"}</p>
+        <p>{tone === "loading" ? "查询流程" : "查询响应"}</p>
         <h2>{title}</h2>
         <span>{description}</span>
       </div>

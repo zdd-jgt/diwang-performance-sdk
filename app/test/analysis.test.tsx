@@ -85,7 +85,7 @@ describe("数据分析组件", () => {
     );
 
     expect(screen.getByText("/page-1")).toBeTruthy();
-    expect(screen.getByText("POOR")).toBeTruthy();
+    expect(screen.getByText("较差")).toBeTruthy();
     expect(screen.getByText("4.52s")).toBeTruthy();
     expect(screen.getByText("101")).toBeTruthy();
   });
@@ -95,10 +95,10 @@ describe("数据分析组件", () => {
     render(<VitalsChart points={VITALS} range="7d" />);
 
     const lcpTab = screen.getByRole("tab", {
-      name: "LCP Largest Contentful Paint"
+      name: "LCP 最大内容绘制"
     });
     const clsTab = screen.getByRole("tab", {
-      name: "CLS Cumulative Layout Shift"
+      name: "CLS 累积布局偏移"
     });
     expect(
       screen.getByRole("img", { name: "LCP P50、P95、P99 趋势图" })
@@ -116,7 +116,7 @@ describe("数据分析组件", () => {
 
     await user.click(
       screen.getByRole("tab", {
-        name: "INP Interaction to Next Paint"
+        name: "INP 交互到下次绘制"
       })
     );
     expect(

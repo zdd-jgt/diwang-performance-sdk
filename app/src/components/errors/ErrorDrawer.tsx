@@ -91,7 +91,7 @@ export function ErrorDrawer({ error, onClose }: ErrorDrawerProps) {
         <span className="error-drawer__edge" aria-hidden="true" />
         <header className="error-drawer__header">
           <div>
-            <p>ERROR FORENSICS / SANITIZED SAMPLE</p>
+            <p>错误诊断 / 已脱敏样本</p>
             <h2 id="error-drawer-title">错误详情</h2>
           </div>
           <button
@@ -132,14 +132,14 @@ export function ErrorDrawer({ error, onClose }: ErrorDrawerProps) {
               <dd>{formatOccurredAt(error.occurredAt)}</dd>
             </div>
             <div>
-              <dt>Record ID</dt>
+              <dt>记录 ID</dt>
               <dd>{error.recordId}</dd>
             </div>
           </dl>
 
           <section className="error-stack">
             <div>
-              <span>SANITIZED STACK</span>
+              <span>已脱敏调用栈</span>
               <small>已移除用户输入与敏感上下文</small>
             </div>
             <pre>{error.stack}</pre>
